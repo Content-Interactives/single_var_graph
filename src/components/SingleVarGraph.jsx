@@ -51,6 +51,8 @@ const EMPTY_CIRCLE_MAX_SPAN = fullUnit * 0.9;
 /** Min vertical extent (px) so we require some up/down motion */
 const EMPTY_CIRCLE_MIN_VERTICAL = 12;
 const EMPTY_CIRCLE_RADIUS = 8;
+/** If path length (ink) is at least this many times the bounding-box perimeter, treat circle as filled */
+const FILLED_CIRCLE_INK_RATIO = 1.3;
 
 /** Split a horizontal segment into sub-segments that do not cross open circle interiors */
 const splitSegmentAtOpenCircles = (seg, emptyCircleTicks) => {
@@ -183,6 +185,13 @@ const SingleVarGraph = () => {
 			const maxY = Math.max(...ys);
 			const spanX = maxX - minX;
 			const spanY = maxY - minY;
+			// Total "ink": path length (sum of segment lengths)
+			const pathLength = prev.length < 2 ? 0 : prev.slice(0, -1).reduce((sum, p, i) => {
+				const q = prev[i + 1];
+				return sum + Math.hypot(q.x - p.x, q.y - p.y);
+			}, 0);
+			const perimeter = 2 * (spanX + spanY) || 1;
+			const inkRatio = pathLength / perimeter;
 			// Detect "empty circle" gesture: small horizontal span, some vertical motion, multiple points
 			if (
 				prev.length >= 4 &&
@@ -193,7 +202,12 @@ const SingleVarGraph = () => {
 				const centerVal = xToValue(centerX);
 				const tick = Math.round(centerVal);
 				const clampedTick = Math.max(MIN, Math.min(MAX, tick));
-				pushHistory({ type: ACTION_EMPTY_CIRCLE, tick: clampedTick });
+				// Lots of ink (scribbling/filling) -> filled circle regardless of outline
+				if (inkRatio >= FILLED_CIRCLE_INK_RATIO) {
+					pushHistory({ type: ACTION_FILLED_CIRCLE, tick: clampedTick });
+				} else {
+					pushHistory({ type: ACTION_EMPTY_CIRCLE, tick: clampedTick });
+				}
 				return [];
 			}
 			// Detect "filled circle" gesture: small horizontal span, little vertical motion (drawing on the line)
